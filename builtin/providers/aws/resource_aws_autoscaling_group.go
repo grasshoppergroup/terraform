@@ -378,7 +378,7 @@ func resourceAwsAutoscalingGroupCreate(d *schema.ResourceData, meta interface{})
 		}
 	}
 
-	if err := waitForASGCapacity(d, meta, capacitySatisfiedCreate); err != nil {
+	if err := waitForASGCapacity(d, d.Id(), meta, capacitySatisfiedCreate); err != nil {
 		return err
 	}
 
@@ -596,7 +596,7 @@ func resourceAwsAutoscalingGroupUpdate(d *schema.ResourceData, meta interface{})
 	}
 
 	if shouldWaitForCapacity {
-		if err := waitForASGCapacity(d, meta, capacitySatisfiedUpdate); err != nil {
+		if err := waitForASGCapacity(d, d.Id(), meta, capacitySatisfiedUpdate); err != nil {
 			return errwrap.Wrapf("Error waiting for AutoScaling Group Capacity: {{err}}", err)
 		}
 	}
