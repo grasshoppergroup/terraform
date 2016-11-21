@@ -48,10 +48,9 @@ func waitForASGCapacity(
 			return nil
 		}
 
-		elbis, err := getLBInstanceStates(g, meta)
-		albis, err := getTargetGroupInstanceStates(g, meta)
-
 		significantLbs := getSignificantLbsNames(d)
+		elbis, err := getELBInstanceStates(significantLbs, meta)
+		albis, err := getTargetGroupInstanceStates(g, meta)
 
 		if err != nil {
 			return resource.NonRetryableError(err)
