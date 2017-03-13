@@ -18,6 +18,7 @@ import (
 // See "Waiting for Capacity" in docs for more discussion of the feature.
 func waitForASGCapacity(
 	d *schema.ResourceData,
+	autoscaleId string,
 	meta interface{},
 	satisfiedFunc capacitySatisfiedFunc) error {
 	wait, err := time.ParseDuration(d.Get("wait_for_capacity_timeout").(string))
@@ -30,20 +31,21 @@ func waitForASGCapacity(
 		return nil
 	}
 
-	log.Printf("[DEBUG] Waiting on %s for capacity...", d.Id())
+	log.Printf("[DEBUG] Waiting on %s for capacity...", autoscaleId)
 
 	return resource.Retry(wait, func() *resource.RetryError {
-		g, err := getAwsAutoscalingGroup(d.Id(), meta.(*AWSClient).autoscalingconn)
+		g, err := getAwsAutoscalingGroup(autoscaleId, meta.(*AWSClient).autoscalingconn)
 		if err != nil {
 			return resource.NonRetryableError(err)
 		}
 		if g == nil {
-			log.Printf("[INFO] Autoscaling Group %q not found", d.Id())
-			d.SetId("")
+			log.Printf("[INFO] Autoscaling Group %q not found", autoscaleId)
 			return nil
 		}
-		elbis, err := getELBInstanceStates(g, meta)
+		significantLbs := getSignificantLbsNames(d)
+		elbis, err := getELBInstanceStates(significantLbs, meta)
 		albis, err := getTargetGroupInstanceStates(g, meta)
+
 		if err != nil {
 			return resource.NonRetryableError(err)
 		}
@@ -67,7 +69,12 @@ func waitForASGCapacity(
 			haveASG++
 
 			inAllLbs := true
-			for _, states := range elbis {
+			for _, states := range significantLbs {
+				states, lbOK := elbis[lbName]
+				if !lbOK {
+					inAllLbs = false
+					break
+				}
 				state, ok := states[*i.InstanceId]
 				if !ok || !strings.EqualFold(state, "InService") {
 					inAllLbs = false
@@ -87,15 +94,32 @@ func waitForASGCapacity(
 		satisfied, reason := satisfiedFunc(d, haveASG, haveELB)
 
 		log.Printf("[DEBUG] %q Capacity: %d ASG, %d ELB/ALB, satisfied: %t, reason: %q",
-			d.Id(), haveASG, haveELB, satisfied, reason)
+			autoscaleId, haveASG, haveELB, satisfied, reason)
 
 		if satisfied {
 			return nil
 		}
 
 		return resource.RetryableError(
-			fmt.Errorf("%q: Waiting up to %s: %s", d.Id(), wait, reason))
+			fmt.Errorf("%q: Waiting up to %s: %s", autoscaleId, wait, reason))
 	})
+}
+
+// Function to support extracting the LB names that we actually care about.
+// For the aws_autoscaling_group that can come in the form of a set via the `load_balancers` attribute
+// for the aws_atuoscaling_attachment that can be in the form of a single LB name via the `elb` attribute
+func getSignificantLbsNames(d *schema.ResourceData) []string {
+	if s, ok := d.GetOk("load_balancers"); ok && s.(*schema.Set).Len() > 0 {
+		ret := []string{}
+		for _, v := range s.(*schema.Set).List() {
+			ret = append(ret, v.(string))
+		}
+		return ret
+	}
+	if v, ok := d.GetOk("elb"); ok {
+		return []string{v.(string)}
+	}
+	return []string{}
 }
 
 type capacitySatisfiedFunc func(*schema.ResourceData, int, int) (bool, string)
@@ -134,6 +158,14 @@ func capacitySatisfiedUpdate(d *schema.ResourceData, haveASG, haveELB int) (bool
 			return false, fmt.Sprintf(
 				"Need exactly %d healthy instances in ELB, have %d", wantELB, haveELB)
 		}
+	}
+	return true, ""
+}
+
+func capacitySatisfiedAttach(d *schema.ResourceData, haveASG, haveELB int) (bool, string) {
+	if wantELB := d.Get("wait_for_elb_capacity").(int); wantELB > 0 && haveELB < wantELB {
+		return false, fmt.Sprintf(
+			"Need exactly %d healthy instances in ELB, have %d", wantELB, haveELB)
 	}
 	return true, ""
 }
