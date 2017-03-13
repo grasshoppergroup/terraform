@@ -85,9 +85,9 @@ resource "aws_security_group" "tf_open_ingress" {
   description = "tf_open_ingress_sg"
 
   ingress {
-    from_port = 80
-    to_port   = 80
-    protocol  = "tcp"
+    from_port   = 80
+    to_port     = 80
+    protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
   }
 

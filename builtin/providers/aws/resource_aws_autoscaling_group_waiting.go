@@ -69,7 +69,7 @@ func waitForASGCapacity(
 			haveASG++
 
 			inAllLbs := true
-			for _, states := range significantLbs {
+			for _, lbName := range significantLbs {
 				states, lbOK := elbis[lbName]
 				if !lbOK {
 					inAllLbs = false
