@@ -40,8 +40,14 @@ func waitForASGCapacity(
 		}
 		if g == nil {
 			log.Printf("[INFO] Autoscaling Group %q not found", autoscaleId)
+			//TODO JRN: Need to figure out what to do here!
+			// 	There could be a few reasons for this I suppose, the ASG actually not existing which seems like it should be an error
+			//	Or AWS's eventual consistency not returning the ASG information yet, which should probably be a retryable error, not a fast "fail"
+			//  I don't see how the calling code actually handles this ID not being sent, it seems like it proceeds on as "normal"
+			// d.SetId("")
 			return nil
 		}
+
 		significantLbs := getSignificantLbsNames(d)
 		elbis, err := getELBInstanceStates(significantLbs, meta)
 		albis, err := getTargetGroupInstanceStates(g, meta)
@@ -70,8 +76,8 @@ func waitForASGCapacity(
 
 			inAllLbs := true
 			for _, lbName := range significantLbs {
-				states, lbOK := elbis[lbName]
-				if !lbOK {
+				states, lbOk := elbis[lbName]
+				if !lbOk {
 					inAllLbs = false
 					break
 				}

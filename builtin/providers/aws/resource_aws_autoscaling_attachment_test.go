@@ -119,6 +119,9 @@ resource "aws_elb" "bar" {
   availability_zones = ["us-west-2a", "us-west-2b", "us-west-2c"]
 
   listener {
+    # NOTE: This is an INTENTIONALLY misconfigured port to ensure that the waitForAsg
+    # process will only take into account the LBs/attachments that are explicitly
+    # called out in the attachment resource
     instance_port     = 8000
     instance_protocol = "http"
     lb_port           = 80

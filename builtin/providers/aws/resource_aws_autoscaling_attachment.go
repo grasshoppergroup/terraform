@@ -32,7 +32,7 @@ func resourceAwsAutoscalingAttachment() *schema.Resource {
 			},
 
 			"wait_for_elb_capacity": &schema.Schema{
-				Type:     schema.TypeString,
+				Type:     schema.TypeInt,
 				ForceNew: true,
 				Optional: true,
 			},
@@ -46,10 +46,12 @@ func resourceAwsAutoscalingAttachment() *schema.Resource {
 					value := v.(string)
 					duration, err := time.ParseDuration(value)
 					if err != nil {
-						errors = append(errors, fmt.Errorf("%q cannot be parsed as a duration: %s", k, err))
+						errors = append(errors, fmt.Errorf(
+							"%q cannot be parsed as a duration: %s", k, err))
 					}
 					if duration < 0 {
-						errors = append(errors, fmt.Errorf("%q must be greater than zero", k))
+						errors = append(errors, fmt.Errorf(
+							"%q must be greater than zero", k))
 					}
 					return
 				},
