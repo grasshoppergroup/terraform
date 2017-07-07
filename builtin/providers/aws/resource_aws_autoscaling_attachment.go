@@ -98,8 +98,10 @@ func resourceAwsAutoscalingAttachmentCreate(d *schema.ResourceData, meta interfa
 
 	d.SetId(resource.PrefixedUniqueId(fmt.Sprintf("%s-", asgName)))
 
-	if err := waitForASGCapacity(d, asgName, meta, capacitySatisfiedAttach); err != nil {
-		return errwrap.Wrapf(fmt.Sprintf("Failure waiting on AutoScaling Group %s capacity on Elastic Load Balancer: %s: {{err}}", asgName, elbName), err)
+	if v, ok := d.GetOk("elb"); ok {
+		if err := waitForASGCapacity(d, asgName, meta, capacitySatisfiedAttach); err != nil {
+			return errwrap.Wrapf(fmt.Sprintf("Failure waiting on AutoScaling Group %s capacity on Elastic Load Balancer: %s: {{err}}", asgName, v.(string)), err)
+		}
 	}
 
 	return resourceAwsAutoscalingAttachmentRead(d, meta)
