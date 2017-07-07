@@ -50,7 +50,7 @@ func waitForASGCapacity(
 			// d.SetId("")
 			return nil
 		}
-		
+
 		significantLbs := getSignificantLbsNames(d)
 		elbis, err := getELBInstanceStates(significantLbs, meta)
 		albis, err := getTargetGroupInstanceStates(g, meta)
