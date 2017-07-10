@@ -242,20 +242,6 @@ resource "aws_vpc" "test" {
 
 func testAccAWSAutoscalingAttachment_elb(rInt int) string {
 	return fmt.Sprintf(`
-resource "aws_security_group" "tf_open_ingress" {
-  name        = "tf_open_ingress_sg"
-  description = "tf_open_ingress_sg"
-  ingress {
-    from_port   = 80
-    to_port     = 80
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-  tags {
-    Name = "testAccAWSAutoscalingAttachment_elb"
-  }
-}
-
 resource "aws_elb" "foo" {
   availability_zones = ["us-west-2a", "us-west-2b", "us-west-2c"]
 
@@ -279,9 +265,6 @@ resource "aws_elb" "bar" {
   availability_zones = ["us-west-2a", "us-west-2b", "us-west-2c"]
 
   listener {
-    # NOTE: This is an INTENTIONALLY misconfigured port to ensure that the waitForAsg
-    # process will only take into account the LBs/attachments that are explicitly
-    # called out in the attachment resource
     instance_port     = 8000
     instance_protocol = "http"
     lb_port           = 80
@@ -297,12 +280,26 @@ resource "aws_elb" "bar" {
   }
 }
 
+resource "aws_security_group" "tf_open_ingress" {
+  name        = "tf_open_ingress_sg"
+  description = "tf_open_ingress_sg"
+  ingress {
+    from_port   = 80
+    to_port     = 80
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags {
+    Name = "testAccAWSAutoscalingAttachment_elb"
+  }
+}
+
 resource "aws_launch_configuration" "as_conf" {
-  // need an AMI that listens on :80 at boot, this is:
-  // bitnami-nginxstack-1.6.1-0-linux-ubuntu-14.04.1-x86_64-hvm-ebs-ami-99f5b1a9-3
-  image_id = "ami-b5b3fc85"
-  instance_type = "t2.micro"
-  security_groups = ["${aws_security_group.tf_open_ingress.id}"]
+    name = "test_config_%d"
+    image_id = "ami-b5b3fc85"
+    instance_type = "t2.micro"
+    security_groups = ["${aws_security_group.tf_open_ingress.id}"]
 }
 
 resource "aws_autoscaling_group" "asg" {
