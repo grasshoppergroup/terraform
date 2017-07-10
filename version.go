@@ -7,4 +7,4 @@ var GitCommit string
 
 const Version = terraform.Version
 
-var VersionPrerelease = terraform.VersionPrerelease
+var VersionPrerelease = "dev"

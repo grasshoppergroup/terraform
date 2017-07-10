@@ -3,6 +3,7 @@ package aws
 import (
 	"fmt"
 	"log"
+	"time"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/autoscaling"
@@ -28,6 +29,32 @@ func resourceAwsAutoscalingAttachment() *schema.Resource {
 				Type:     schema.TypeString,
 				ForceNew: true,
 				Optional: true,
+			},
+
+			"wait_for_elb_capacity": {
+				Type:     schema.TypeInt,
+				ForceNew: true,
+				Optional: true,
+			},
+
+			"wait_for_capacity_timeout": {
+				Type:     schema.TypeString,
+				ForceNew: true,
+				Optional: true,
+				Default:  "10m",
+				ValidateFunc: func(v interface{}, k string) (ws []string, errors []error) {
+					value := v.(string)
+					duration, err := time.ParseDuration(value)
+					if err != nil {
+						errors = append(errors, fmt.Errorf(
+							"%q cannot be parsed as a duration: %s", k, err))
+					}
+					if duration < 0 {
+						errors = append(errors, fmt.Errorf(
+							"%q must be greater than zero", k))
+					}
+					return
+				},
 			},
 
 			"alb_target_group_arn": {
@@ -70,6 +97,12 @@ func resourceAwsAutoscalingAttachmentCreate(d *schema.ResourceData, meta interfa
 	}
 
 	d.SetId(resource.PrefixedUniqueId(fmt.Sprintf("%s-", asgName)))
+
+	if v, ok := d.GetOk("elb"); ok {
+		if err := waitForASGCapacity(d, asgName, meta, capacitySatisfiedAttach); err != nil {
+			return errwrap.Wrapf(fmt.Sprintf("Failure waiting on AutoScaling Group %s capacity on Elastic Load Balancer: %s: {{err}}", asgName, v.(string)), err)
+		}
+	}
 
 	return resourceAwsAutoscalingAttachmentRead(d, meta)
 }
