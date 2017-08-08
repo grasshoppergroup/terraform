@@ -96,6 +96,24 @@ func TestAccAWSElasticSearchDomain_complex(t *testing.T) {
 	})
 }
 
+func TestAccAWSElasticSearchDomain_policy(t *testing.T) {
+	var domain elasticsearch.ElasticsearchDomainStatus
+
+	resource.Test(t, resource.TestCase{
+		PreCheck:     func() { testAccPreCheck(t) },
+		Providers:    testAccProviders,
+		CheckDestroy: testAccCheckESDomainDestroy,
+		Steps: []resource.TestStep{
+			{
+				Config: testAccESDomainConfigWithPolicy(acctest.RandInt(), acctest.RandInt()),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheckESDomainExists("aws_elasticsearch_domain.example", &domain),
+				),
+			},
+		},
+	})
+}
+
 func TestAccAWSElasticSearchDomain_tags(t *testing.T) {
 	var domain elasticsearch.ElasticsearchDomainStatus
 	var td elasticsearch.ListTagsOutput
@@ -124,6 +142,54 @@ func TestAccAWSElasticSearchDomain_tags(t *testing.T) {
 			},
 		},
 	})
+}
+
+func TestAccAWSElasticSearchDomain_update(t *testing.T) {
+	var input elasticsearch.ElasticsearchDomainStatus
+	ri := acctest.RandInt()
+
+	resource.Test(t, resource.TestCase{
+		PreCheck:     func() { testAccPreCheck(t) },
+		Providers:    testAccProviders,
+		CheckDestroy: testAccCheckESDomainDestroy,
+		Steps: []resource.TestStep{
+			{
+				Config: testAccESDomainConfig_ClusterUpdate(ri, 2, 22),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheckESDomainExists("aws_elasticsearch_domain.example", &input),
+					testAccCheckESNumberOfInstances(2, &input),
+					testAccCheckESSnapshotHour(22, &input),
+				),
+			},
+			{
+				Config: testAccESDomainConfig_ClusterUpdate(ri, 4, 23),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheckESDomainExists("aws_elasticsearch_domain.example", &input),
+					testAccCheckESNumberOfInstances(4, &input),
+					testAccCheckESSnapshotHour(23, &input),
+				),
+			},
+		}})
+}
+
+func testAccCheckESSnapshotHour(snapshotHour int, status *elasticsearch.ElasticsearchDomainStatus) resource.TestCheckFunc {
+	return func(s *terraform.State) error {
+		conf := status.SnapshotOptions
+		if *conf.AutomatedSnapshotStartHour != int64(snapshotHour) {
+			return fmt.Errorf("Snapshots start hour differ. Given: %d, Expected: %d", *conf.AutomatedSnapshotStartHour, snapshotHour)
+		}
+		return nil
+	}
+}
+
+func testAccCheckESNumberOfInstances(numberOfInstances int, status *elasticsearch.ElasticsearchDomainStatus) resource.TestCheckFunc {
+	return func(s *terraform.State) error {
+		conf := status.ElasticsearchClusterConfig
+		if *conf.InstanceCount != int64(numberOfInstances) {
+			return fmt.Errorf("Number of instances differ. Given: %d, Expected: %d", *conf.InstanceCount, numberOfInstances)
+		}
+		return nil
+	}
 }
 
 func testAccLoadESTags(conf *elasticsearch.ElasticsearchDomainStatus, td *elasticsearch.ListTagsOutput) resource.TestCheckFunc {
@@ -206,6 +272,34 @@ resource "aws_elasticsearch_domain" "example" {
 `, randInt)
 }
 
+func testAccESDomainConfig_ClusterUpdate(randInt, instanceInt, snapshotInt int) string {
+	return fmt.Sprintf(`
+resource "aws_elasticsearch_domain" "example" {
+  domain_name = "tf-test-%d"
+
+  advanced_options {
+    "indices.fielddata.cache.size" = 80
+  }
+
+  ebs_options {
+    ebs_enabled = true
+		volume_size = 10
+		
+  }
+
+  cluster_config {
+    instance_count = %d
+    zone_awareness_enabled = true
+    instance_type = "t2.micro.elasticsearch"
+  }
+
+  snapshot_options {
+    automated_snapshot_start_hour = %d
+  }
+}
+`, randInt, instanceInt, snapshotInt)
+}
+
 func testAccESDomainConfig_TagUpdate(randInt int) string {
 	return fmt.Sprintf(`
 resource "aws_elasticsearch_domain" "example" {
@@ -221,6 +315,46 @@ resource "aws_elasticsearch_domain" "example" {
   }
 }
 `, randInt)
+}
+
+func testAccESDomainConfigWithPolicy(randESId int, randRoleId int) string {
+	return fmt.Sprintf(`
+resource "aws_elasticsearch_domain" "example" {
+  domain_name = "tf-test-%d"
+   ebs_options {
+    ebs_enabled = true
+    volume_size = 10
+  }
+  access_policies = <<CONFIG
+  {
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Principal": {
+	"AWS": "${aws_iam_role.example_role.arn}"
+      },
+      "Action": "es:*",
+      "Resource": "arn:aws:es:*"
+    }
+  ]
+  }
+CONFIG
+}
+resource "aws_iam_role" "example_role" {
+  name = "es-domain-role-%d"
+  assume_role_policy = "${data.aws_iam_policy_document.instance-assume-role-policy.json}"
+}
+data "aws_iam_policy_document" "instance-assume-role-policy" {
+  statement {
+    actions = ["sts:AssumeRole"]
+    principals {
+      type        = "Service"
+      identifiers = ["ec2.amazonaws.com"]
+    }
+  }
+}
+`, randESId, randRoleId)
 }
 
 func testAccESDomainConfig_complex(randInt int) string {
